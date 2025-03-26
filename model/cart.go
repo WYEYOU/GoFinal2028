@@ -12,6 +12,7 @@ type Cart struct {
 	CartName   string    `gorm:"column:cart_name"`
 	CreatedAt  time.Time `gorm:"column:created_at;default:CURRENT_TIMESTAMP"`
 	UpdatedAt  time.Time `gorm:"column:updated_at;default:CURRENT_TIMESTAMP"`
+	Items      []CartItem `gorm:"foreignKey:CartID" json:"items"`
 }
 
 func (m *Cart) TableName() string {

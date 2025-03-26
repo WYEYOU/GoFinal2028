@@ -16,6 +16,7 @@ func CartController(router *gin.Engine) {
 		routers.GET("/product", products)
 		routers.GET("/products", searchProducts) // ค้นหาสินค้า
 		routers.POST("/add", addToCart)          // เพิ่มสินค้าลงรถเข็น
+		routers.GET("/all", getCartsByCustomerID)
 	}
 
 }
@@ -134,4 +135,23 @@ func addToCart(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Product added to cart successfully"})
+}
+
+func getCartsByCustomerID(c *gin.Context) {
+	customerID := c.Query("customer_id")
+
+	if customerID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "customer_id is required"})
+		return
+	}
+
+	var carts []model.Cart
+	if err := DB.Preload("Items").Preload("Items.Product").
+		Where("customer_id = ?", customerID).
+		Find(&carts).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": carts})
 }
