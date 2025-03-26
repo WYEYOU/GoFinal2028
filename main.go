@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"gofinal/controller"
 	"gofinal/model"
 
 	"github.com/spf13/viper"
@@ -29,7 +30,7 @@ func main() {
 	}
 	println("Connection successful")
 	DB = db
-	// controller.SetDB(DB)
+	controller.SetDB(DB)
 
 	customers := []model.Customer{}
 	result := db.Find(&customers)
@@ -38,6 +39,6 @@ func main() {
 	}
 	fmt.Println(customers)
 
-	// controller.StartServer()
+	controller.StartServer()
 
 }
