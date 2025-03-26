@@ -3,6 +3,7 @@ package controller
 import (
 	"gofinal/model"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -19,10 +20,11 @@ func CustomerController(router *gin.Engine) {
 	routers := router.Group("/customers")
 	{
 		routers.GET("/", customers)
-		routers.POST("/login", loginCustomer)      // ลูกค้าล็อกอิน
-		routers.GET("/:id", getCustomer)           // ดึงข้อมูลลูกค้า
-		routers.PUT("/:id/address", updateAddress) // แก้ไขที่อยู่ลูกค้า
-		routers.POST("/reg", registerCustomer)     // สมัคร
+		routers.POST("/login", loginCustomer)        // ลูกค้าล็อกอิน
+		routers.GET("/:id", getCustomer)             // ดึงข้อมูลลูกค้า
+		routers.PUT("/:id/address", updateAddress)   // แก้ไขที่อยู่ลูกค้า
+		routers.POST("/reg", registerCustomer)       // สมัคร
+		routers.PUT("/:id/password", updatePassword) //แก้ไขรหัสผ่าน
 	}
 
 }
@@ -113,15 +115,31 @@ func loginCustomer(c *gin.Context) {
 		return
 	}
 
-	// คืนค่าข้อมูลลูกค้า ยกเว้นรหัสผ่าน
-	c.JSON(http.StatusOK, gin.H{
-		"customer_id":  customer.CustomerID,
-		"first_name":   customer.FirstName,
-		"last_name":    customer.LastName,
-		"email":        customer.Email,
-		"phone_number": customer.PhoneNumber,
-		"address":      customer.Address,
-	})
+	// Struct กำหนดลำดับข้อมูล
+	type CustomerResponse struct {
+		CustomerID  int       `json:"customer_id"`
+		FirstName   string    `json:"first_name"`
+		LastName    string    `json:"last_name"`
+		Email       string    `json:"email"`
+		PhoneNumber string    `json:"phone_number"`
+		Address     string    `json:"address"`
+		CreatedAt   time.Time `json:"created_at"`
+		UpdatedAt   time.Time `json:"updated_at"`
+	}
+
+	// คืนค่าข้อมูลลูกค้าโดยไม่แสดงรหัสผ่าน
+	response := CustomerResponse{
+		CustomerID:  customer.CustomerID,
+		FirstName:   customer.FirstName,
+		LastName:    customer.LastName,
+		Email:       customer.Email,
+		PhoneNumber: customer.PhoneNumber,
+		Address:     customer.Address,
+		CreatedAt:   customer.CreatedAt,
+		UpdatedAt:   customer.UpdatedAt,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // ฟังก์ชันดึงข้อมูลลูกค้า
@@ -134,17 +152,31 @@ func getCustomer(c *gin.Context) {
 		return
 	}
 
-	// คืนค่าข้อมูลลูกค้า โดยเรียงลำดับตามโครงสร้างของตาราง และไม่แสดงรหัสผ่าน
-	c.JSON(http.StatusOK, gin.H{
-		"customer_id":  customer.CustomerID,
-		"first_name":   customer.FirstName,
-		"last_name":    customer.LastName,
-		"email":        customer.Email,
-		"phone_number": customer.PhoneNumber,
-		"address":      customer.Address,
-		"created_at":   customer.CreatedAt,
-		"updated_at":   customer.UpdatedAt,
-	})
+	// สร้าง struct ที่กำหนดลำดับของฟิลด์เอง
+	type CustomerResponse struct {
+		CustomerID  int       `json:"customer_id"`
+		FirstName   string    `json:"first_name"`
+		LastName    string    `json:"last_name"`
+		Email       string    `json:"email"`
+		PhoneNumber string    `json:"phone_number"`
+		Address     string    `json:"address"`
+		CreatedAt   time.Time `json:"created_at"`
+		UpdatedAt   time.Time `json:"updated_at"`
+	}
+
+	// คืนค่าข้อมูลลูกค้าโดยใช้ struct
+	response := CustomerResponse{
+		CustomerID:  customer.CustomerID,
+		FirstName:   customer.FirstName,
+		LastName:    customer.LastName,
+		Email:       customer.Email,
+		PhoneNumber: customer.PhoneNumber,
+		Address:     customer.Address,
+		CreatedAt:   customer.CreatedAt,
+		UpdatedAt:   customer.UpdatedAt,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // ฟังก์ชันอัปเดตที่อยู่ลูกค้า
@@ -165,4 +197,45 @@ func updateAddress(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Address updated successfully"})
+}
+
+func updatePassword(c *gin.Context) {
+	customerID := c.Param("id")
+
+	var input struct {
+		OldPassword string `json:"old_password" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var customer model.Customer
+	if err := DB.First(&customer, customerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Customer not found"})
+		return
+	}
+
+	// รหัสผ่านที่เข้ารหัส ใช้ bcrypt เช็ค
+	if !checkPasswordHash(input.OldPassword, customer.Password) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Old password is incorrect"})
+		return
+	}
+
+	// เข้ารหัสรหัสผ่านใหม่
+	hashedPassword, err := hashPassword(input.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error hashing password"})
+		return
+	}
+
+	// อัปเดตรหัสผ่านใหม่ในฐานข้อมูล
+	if err := DB.Model(&customer).Update("password", hashedPassword).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password updated successfully"})
 }
